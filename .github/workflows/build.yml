@@ -1,0 +1,73 @@
+name: Build Android APK (கரும்பு கணக்கு)
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-apk:
+    name: Generate Android APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Prepare Web Assets
+        run: |
+          # If a zip archive was uploaded, extract it automatically
+          if ls *.zip 1> /dev/null 2>&1; then
+            echo "Extracting zip archive..."
+            unzip -o *.zip
+          fi
+
+          mkdir -p www
+          # Copy index.html
+          if [ -f "index.html" ]; then
+            cp index.html www/index.html
+          elif [ -f "offline-apk/index.html" ]; then
+            cp offline-apk/index.html www/index.html
+          fi
+
+          [ -f manifest.json ] && cp manifest.json www/manifest.json || true
+          [ -f pwa-192x192.png ] && cp pwa-192x192.png www/pwa-192x192.png || true
+          [ -f pwa-512x512.png ] && cp pwa-512x512.png www/pwa-512x512.png || true
+          [ -f icon.svg ] && cp icon.svg www/icon.svg || true
+
+      - name: Initialize Capacitor Android Project
+        run: |
+          npm init -y
+          npm install @capacitor/core@latest @capacitor/cli@latest @capacitor/android@latest
+          npx cap init "Karumbu Kanakku" "com.karumbukanakku.app" --web-dir www
+          npx cap add android
+          npx cap sync android
+
+      - name: Build Debug Android APK
+        run: |
+          cd android
+          chmod +x ./gradlew
+          ./gradlew assembleDebug --no-daemon
+
+      - name: Prepare APK Output
+        run: |
+          mkdir -p apk-output
+          cp android/app/build/outputs/apk/debug/app-debug.apk apk-output/Karumbu-Kanakku.apk
+
+      - name: Upload APK as GitHub Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Karumbu-Kanakku-Android-APK
+          path: apk-output/Karumbu-Kanakku.apk
+          retention-days: 30
